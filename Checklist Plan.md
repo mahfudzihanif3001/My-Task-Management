@@ -3,9 +3,9 @@
 Ringkasan singkat pekerjaan (untuk reviewer): status saat ini ditandai di sebelah setiap item.
 
 - [x] Inisialisasi Next.js App Router + Tailwind — project scaffold dibuat dan dependency terpasang.
-- [~] Buat project Supabase dan simpan URL + anon key — Supabase project sedang dibuat; keys disimpan lokal dan TIDAK akan dipush.
-- [ ] Definisikan PostgreSQL schema `tasks` + RLS policies — belum dibuat di repo.
-- [ ] Implement Supabase Auth (email & password) — belum dimulai.
+- [x] Buat project Supabase dan simpan URL + anon key — Supabase project sudah siap; keys disimpan lokal dan TIDAK akan dipush.
+- [x] Definisikan PostgreSQL schema `tasks` + RLS policies — schema berhasil dijalankan di Supabase.
+- [~] Implement Supabase Auth (email & password) — UI dan flow dasar selesai; validasi lanjutan menyusul.
 - [ ] Implement Task CRUD (description, due date, priority, notes, completed) — belum dimulai.
 - [ ] Implement sorting (due date, description, priority) — belum dimulai.
 - [ ] Implement due-today alert (toast/notification) — belum dimulai.
@@ -16,6 +16,3 @@ Ringkasan singkat pekerjaan (untuk reviewer): status saat ini ditandai di sebela
 - [ ] Buat commits harian (day1/day2/day3) dengan pesan jelas — rencanakan commit sekarang (day1) lalu lanjut daily.
 - [ ] Final QA & polish sebelum kirim link — target selesai pada May 21, 2026.
 
-Catatan keamanan: jangan commit file yang berisi secrets (mis. `.env` atau Supabase keys). Saya sudah menambahkan `notes/` ke `.gitignore` untuk catatan lokal.
-
-Jika reviewer ingin melihat progres harian terpisah, saya bisa push branch `day1` sekarang, atau langsung push ke `main` — beri tahu preferensi.
