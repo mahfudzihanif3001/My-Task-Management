@@ -106,7 +106,13 @@ export default function Home() {
             <p className="text-sm text-gray-600">Sign in or create account</p>
           </div>
 
-          <div className="space-y-4">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAuth();
+            }} 
+            className="space-y-4"
+          >
             <div className="flex gap-2">
               <button
                 type="button"
@@ -164,8 +170,7 @@ export default function Home() {
             </div>
 
             <button
-              type="button"
-              onClick={handleAuth}
+              type="submit"
               disabled={status === "loading"}
               className="w-full px-4 py-2 bg-black text-white text-sm font-semibold hover:bg-gray-900 disabled:opacity-50"
             >
@@ -177,7 +182,7 @@ export default function Home() {
                 {message}
               </div>
             )}
-          </div>
+          </form>
         </div>
       </main>
     </div>
