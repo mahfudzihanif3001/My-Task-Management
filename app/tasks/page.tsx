@@ -31,6 +31,11 @@ export default function TasksPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isToastDismissed, setIsToastDismissed] = useState(false);
 
+  // Sorting, filtering, searching
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"all" | "active" | "completed">("all");
+  const [sortBy, setSortBy] = useState<"created" | "due_date" | "priority">("created");
+
   useEffect(() => {
     let isMounted = true;
 
@@ -132,6 +137,32 @@ export default function TasksPage() {
   const todayStr = new Date().toISOString().split("T")[0];
   const dueTodayTasks = tasks.filter(t => !t.completed && t.due_date === todayStr);
 
+  // Apply search, filter, and sort
+  let displayedTasks = [...tasks];
+
+  if (searchQuery.trim() !== "") {
+    displayedTasks = displayedTasks.filter(t => 
+      t.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }
+
+  if (filterStatus === "active") {
+    displayedTasks = displayedTasks.filter(t => !t.completed);
+  } else if (filterStatus === "completed") {
+    displayedTasks = displayedTasks.filter(t => t.completed);
+  }
+
+  displayedTasks.sort((a, b) => {
+    if (sortBy === "due_date") {
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    } else if (sortBy === "priority") {
+      return a.priority - b.priority;
+    }
+    return 0; 
+  });
+
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -211,12 +242,49 @@ export default function TasksPage() {
           </button>
         </form>
 
+        <div className="mb-6 p-4 border border-gray-300 bg-gray-50 flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">Search</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search tasks..."
+              className="w-full border border-gray-300 bg-white text-black px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Filter</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as "all" | "active" | "completed")}
+              className="w-full border border-gray-300 bg-white text-black px-3 py-2 text-sm"
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Sort By</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as "created" | "due_date" | "priority")}
+              className="w-full border border-gray-300 bg-white text-black px-3 py-2 text-sm"
+            >
+              <option value="created">Newest First</option>
+              <option value="due_date">Due Date</option>
+              <option value="priority">Priority</option>
+            </select>
+          </div>
+        </div>
+
         <div className="space-y-4">
           <h2 className="font-semibold text-lg">Your Tasks</h2>
-          {tasks.length === 0 ? (
-            <p className="text-gray-500">No tasks yet.</p>
+          {displayedTasks.length === 0 ? (
+            <p className="text-gray-500">No tasks found.</p>
           ) : (
-            tasks.map((task) => (
+            displayedTasks.map((task) => (
               <div key={task.id} className="p-4 border border-gray-300 flex flex-col gap-2">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
