@@ -1,177 +1,184 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
+import { auth } from "@/lib/auth";
 
 type StatusType = "idle" | "loading" | "error" | "success";
+type AuthMode = "sign-in" | "sign-up";
+
+const MIN_PASSWORD_LENGTH = 6;
 
 export default function Home() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<StatusType>("idle");
   const [message, setMessage] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>("sign-in");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadSession = async () => {
-      const { data } = await supabase.auth.getSession();
+      const session = auth.getSession();
       if (!isMounted) return;
-      setUserEmail(data.session?.user.email ?? null);
+      setUserEmail(session?.email ?? null);
     };
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
-      setUserEmail(session?.user.email ?? null);
-    });
 
     loadSession();
 
+    const unsubscribe = auth.onAuthStateChange((session) => {
+      setUserEmail(session?.email ?? null);
+    });
+
     return () => {
       isMounted = false;
-      authListener.subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
-  const handleSignUp = async () => {
-    setStatus("loading");
-    setMessage("");
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) {
-      setStatus("error");
-      setMessage(error.message);
-      return;
+  useEffect(() => {
+    if (userEmail) {
+      router.replace("/tasks");
     }
-    setStatus("success");
-    setMessage("Signup success. Check your email to confirm.");
-  };
+  }, [router, userEmail]);
 
-  const handleSignIn = async () => {
-    setStatus("loading");
+  const handleAuth = async () => {
     setMessage("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setStatus("error");
-      setMessage(error.message);
-      return;
-    }
-    setStatus("success");
-    setMessage("Signed in successfully.");
-  };
 
-  const handleSignOut = async () => {
-    setStatus("loading");
-    setMessage("");
-    const { error } = await supabase.auth.signOut();
-    if (error) {
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
       setStatus("error");
-      setMessage(error.message);
+      setMessage("Please enter a valid email.");
       return;
     }
-    setStatus("success");
-    setMessage("Signed out.");
+
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setStatus("error");
+      setMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+
+    setStatus("loading");
+
+    try {
+      let result;
+
+      if (authMode === "sign-up") {
+        result = await auth.signUp(email, password);
+        if (!result.success) {
+          setStatus("error");
+          setMessage(result.error || "Sign up failed");
+          return;
+        }
+        setStatus("success");
+        setMessage(result.message || "Account created successfully.");
+        // Auto redirect to dashboard after signup
+        setTimeout(() => router.push("/tasks"), 800);
+        return;
+      }
+
+      result = await auth.signIn(email, password);
+      if (!result.success) {
+        setStatus("error");
+        setMessage(result.error || "Login failed");
+        return;
+      }
+
+      setStatus("success");
+      setMessage("Logged in successfully.");
+      router.push("/tasks");
+    } catch (err) {
+      setStatus("error");
+      setMessage("An error occurred. Please try again.");
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-lime-50 px-6 py-10">
-      <main className="mx-auto flex w-full max-w-4xl flex-col gap-10">
-        <section className="rounded-3xl border border-black/10 bg-white/80 p-8 shadow-[0_30px_120px_-60px_rgba(0,0,0,0.35)] backdrop-blur">
-          <div className="flex flex-col gap-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
-              Task Manager Challenge
-            </p>
-            <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">
-              Sign in to manage your daily tasks.
-            </h1>
-            <p className="max-w-2xl text-base text-zinc-600">
-              Login with email + password. Your tasks stay private and are secured with
-              Supabase Row Level Security.
-            </p>
+    <div className="min-h-screen bg-white px-4 py-8">
+      <main className="mx-auto max-w-md">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-black">Task Manager</h1>
+            <p className="text-sm text-gray-600">Sign in or create account</p>
           </div>
 
-          <div className="mt-8 grid gap-6 sm:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-2xl border border-black/10 bg-white p-6">
-              <label className="mb-2 block text-sm font-medium text-zinc-700">Email</label>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAuthMode("sign-in")}
+                className={`flex-1 px-3 py-2 text-sm font-semibold ${
+                  authMode === "sign-in"
+                    ? "bg-black text-white"
+                    : "bg-gray-200 text-black hover:bg-gray-300"
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode("sign-up")}
+                className={`flex-1 px-3 py-2 text-sm font-semibold ${
+                  authMode === "sign-up"
+                    ? "bg-black text-white"
+                    : "bg-gray-200 text-black hover:bg-gray-300"
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-black mb-1">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@email.com"
-                className="w-full rounded-xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-amber-400 focus:bg-white"
+                placeholder="your@email.com"
+                className="w-full px-3 py-2 border border-gray-300 bg-white text-black text-sm"
               />
-
-              <label className="mb-2 mt-4 block text-sm font-medium text-zinc-700">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Minimum 6 characters"
-                className="w-full rounded-xl border border-black/10 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-amber-400 focus:bg-white"
-              />
-
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={handleSignIn}
-                  disabled={status === "loading"}
-                  className="flex-1 rounded-xl bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSignUp}
-                  disabled={status === "loading"}
-                  className="flex-1 rounded-xl border border-zinc-900/10 bg-white px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  Create Account
-                </button>
-              </div>
-
-              {message && (
-                <div
-                  className={`mt-4 rounded-xl px-4 py-3 text-sm ${
-                    status === "error"
-                      ? "bg-rose-50 text-rose-700"
-                      : "bg-emerald-50 text-emerald-700"
-                  }`}
-                >
-                  {message}
-                </div>
-              )}
             </div>
 
-            <div className="rounded-2xl border border-black/10 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 p-6 text-white">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200">
-                Session Status
-              </p>
-              <div className="mt-4 text-sm text-zinc-200">
-                {userEmail ? (
-                  <div className="space-y-3">
-                    <p>
-                      Signed in as <span className="font-semibold">{userEmail}</span>
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleSignOut}
-                      disabled={status === "loading"}
-                      className="w-full rounded-xl bg-amber-300 px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                ) : (
-                  <p>Not signed in yet.</p>
-                )}
+            <div>
+              <label className="block text-sm font-medium text-black mb-1">Password</label>
+              <div className="flex gap-2">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Min 6 characters"
+                  className="flex-1 px-3 py-2 border border-gray-300 bg-white text-black text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="px-3 py-2 bg-gray-200 text-black text-sm font-medium hover:bg-gray-300"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
               </div>
-              <p className="mt-6 text-xs text-zinc-300">
-                Next: build tasks list, sorting, and due-today alerts.
-              </p>
             </div>
+
+            <button
+              type="button"
+              onClick={handleAuth}
+              disabled={status === "loading"}
+              className="w-full px-4 py-2 bg-black text-white text-sm font-semibold hover:bg-gray-900 disabled:opacity-50"
+            >
+              {status === "loading" ? "Processing..." : authMode === "sign-up" ? "Sign Up" : "Sign In"}
+            </button>
+
+            {message && (
+              <div className={`px-3 py-2 text-sm ${status === "error" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                {message}
+              </div>
+            )}
           </div>
-        </section>
+        </div>
       </main>
     </div>
   );
