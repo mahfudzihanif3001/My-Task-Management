@@ -1,30 +1,29 @@
 import { supabase } from "./supabaseClient";
 
+/**
+ * Auth utilities - menggunakan API routes sebagai backend
+ * Ini lebih secure daripada direct Supabase calls dari client
+ */
 export const auth = {
   signIn: async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Call API route instead of direct Supabase
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (error) {
-        // Translate Supabase error to user-friendly message
-        const friendlyError =
-          error.message.includes("Invalid login credentials")
-            ? "Email atau password salah"
-            : error.message;
-        return { success: false, error: friendlyError };
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: data.error || "Login gagal" };
       }
 
-      if (data.session?.user) {
-        const sessionData = {
-          email: data.session.user.email,
-          token: data.session.access_token,
-          userId: data.session.user.id,
-        };
-        localStorage.setItem("auth_session", JSON.stringify(sessionData));
-        return { success: true, email: data.session.user.email };
+      // Store session in localStorage
+      if (data.session) {
+        localStorage.setItem("auth_session", JSON.stringify(data.session));
+        return { success: true, email: data.session.email };
       }
 
       return { success: false, error: "Login gagal" };
@@ -35,41 +34,29 @@ export const auth = {
 
   signUp: async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+      // Call API route instead of direct Supabase
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (error) {
-        return { success: false, error: error.message };
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: data.error || "Signup gagal" };
       }
 
-      // Auto sign in after signup
-      if (data.user) {
-        const { data: signInData, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-
-        if (!signInError && signInData.session?.user) {
-          const sessionData = {
-            email: signInData.session.user.email,
-            token: signInData.session.access_token,
-            userId: signInData.session.user.id,
-          };
-          localStorage.setItem("auth_session", JSON.stringify(sessionData));
-          return {
-            success: true,
-            message: "Account created and signed in successfully.",
-          };
-        }
+      // Store session in localStorage
+      if (data.session) {
+        localStorage.setItem("auth_session", JSON.stringify(data.session));
+        return {
+          success: true,
+          message: "Akun berhasil dibuat dan siap digunakan",
+        };
       }
 
-      return {
-        success: true,
-        message: "Account created. You can now sign in.",
-      };
+      return { success: false, error: "Signup gagal" };
     } catch (err) {
       return { success: false, error: (err as Error).message };
     }
@@ -87,7 +74,10 @@ export const auth = {
 
   signOut: async () => {
     try {
-      await supabase.auth.signOut();
+      // Call logout API
+      await fetch("/api/auth/logout", {
+        method: "POST",
+      });
     } catch (err) {
       console.error("Sign out error:", err);
     }
@@ -97,21 +87,21 @@ export const auth = {
   },
 
   onAuthStateChange: (callback: (session: any) => void) => {
-    const unsubscribe = supabase.auth.onAuthStateChange(async (_, session) => {
-      if (session?.user) {
-        const sessionData = {
-          email: session.user.email,
-          token: session.access_token,
-          userId: session.user.id,
-        };
-        localStorage.setItem("auth_session", JSON.stringify(sessionData));
-        callback(sessionData);
-      } else {
-        localStorage.removeItem("auth_session");
-        callback(null);
-      }
-    });
+    // For now, using localStorage-based state management
+    // In a more advanced setup, could use subscription pattern
+    const session = auth.getSession();
+    callback(session);
 
-    return () => unsubscribe.data?.subscription?.unsubscribe?.();
+    // Optional: Listen for storage changes (e.g., from another tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "auth_session") {
+        const newSession = e.newValue ? JSON.parse(e.newValue) : null;
+        callback(newSession);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => window.removeEventListener("storage", handleStorageChange);
   },
 };

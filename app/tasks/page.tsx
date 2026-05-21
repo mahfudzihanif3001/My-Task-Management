@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { supabase } from "@/lib/supabaseClient";
+import { apiTasks } from "@/lib/apiClient";
+import toast from "react-hot-toast";
+import { LogOut, Plus } from "lucide-react";
+import { COLORS, FILTER_STATUS, SORT_OPTIONS, API_MESSAGES } from "@/lib/constants";
+import { getTodayDateString, formatCurrentDateTime } from "@/lib/dateUtils";
+import { filterAndSortTasks, calculateTaskStats, countTasksDueToday } from "@/lib/taskUtils";
+import { TaskItem } from "@/components/TaskItem";
+import "@/app/tasks.css";
 
 interface Task {
   id: string;
@@ -20,62 +27,72 @@ export default function TasksPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
-
   const [tasks, setTasks] = useState<Task[]>([]);
-
-  // Form fields
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState(2); // 2 = sedang
+  const [priority, setPriority] = useState(2);
   const [notes, setNotes] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [isToastDismissed, setIsToastDismissed] = useState(false);
-
-  // Sorting, filtering, searching
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "completed">("all");
-  const [sortBy, setSortBy] = useState<"created" | "due_date" | "priority">("created");
+  const [sortBy, setSortBy] = useState<"created" | "due_date" | "priority" | "description">("created");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [hasNotifiedDue, setHasNotifiedDue] = useState(false);
+  const [currentTime, setCurrentTime] = useState<string>("");
+  const [toastId, setToastId] = useState<string | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-
     const loadSession = async () => {
       const session = auth.getSession();
       if (!isMounted) return;
-
       if (!session?.email || !session?.userId) {
         router.replace("/");
         return;
       }
-
       setUserEmail(session.email);
       setUserId(session.userId);
       setStatus("ready");
     };
-
     loadSession();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [router]);
 
   useEffect(() => {
-    if (status === "ready" && userId) {
-      fetchTasks();
-    }
+    if (status === "ready" && userId) fetchTasks(userId);
   }, [status, userId]);
 
-  const fetchTasks = async () => {
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("*")
-      .order("created_at", { ascending: false });
+  useEffect(() => {
+    if (tasks.length > 0 && !hasNotifiedDue) {
+      const todayStr = getTodayDateString();
+      const dueTodayCount = countTasksDueToday(tasks, todayStr);
+      if (dueTodayCount > 0) {
+        const id = toast.custom((t) => (
+          <div style={{ background: "white", border: `1px solid ${COLORS.PRIMARY_DARK}`, borderRadius: "8px", padding: "12px 16px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+            <span style={{ color: COLORS.PRIMARY_DARK, fontWeight: "600", fontSize: "13px" }}>✓ {dueTodayCount} task(s) due today!</span>
+            <button onClick={() => toast.dismiss(t.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "18px", color: COLORS.TEXT_LIGHT, padding: "0", display: "flex", alignItems: "center" }}>×</button>
+          </div>
+        ), { duration: Infinity });
+        setToastId(id as string);
+        setHasNotifiedDue(true);
+      }
+    }
+  }, [tasks, hasNotifiedDue]);
 
-    if (error) {
-      console.error("Error fetching tasks:", error);
-    } else {
-      setTasks(data || []);
+  useEffect(() => {
+    const updateTime = () => setCurrentTime(formatCurrentDateTime());
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchTasks = async (uId: string) => {
+    try {
+      const tasks = await apiTasks.list();
+      setTasks(tasks || []);
+    } catch (err) {
+      console.error("Failed to fetch tasks:", err);
+      toast.error(API_MESSAGES.TASK_FAILED_DELETE);
     }
   };
 
@@ -86,263 +103,169 @@ export default function TasksPage() {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description.trim()) {
-      setErrorMsg("Description is required");
-      return;
-    }
-    setErrorMsg("");
-
-    const newTask = {
-      description,
-      due_date: dueDate || null,
-      priority,
-      notes: notes || null,
-      user_id: userId,
-    };
-
-    const { error } = await supabase.from("tasks").insert([newTask]);
-    if (error) {
-      setErrorMsg(error.message);
-    } else {
+    if (!description.trim() || !userId) return;
+    try {
+      await apiTasks.create({
+        description,
+        dueDate: dueDate || undefined,
+        priority,
+        notes: notes || undefined,
+      });
       setDescription("");
       setDueDate("");
       setPriority(2);
       setNotes("");
-      fetchTasks();
+      fetchTasks(userId);
+      toast.success(API_MESSAGES.TASK_CREATED);
+    } catch (err) {
+      toast.error(API_MESSAGES.TASK_FAILED_CREATE);
     }
   };
 
   const toggleComplete = async (taskId: string, currentCompleted: boolean) => {
-    const { error } = await supabase
-      .from("tasks")
-      .update({ completed: !currentCompleted })
-      .eq("id", taskId);
-
-    if (error) {
-      console.error("Error updating task:", error);
-    } else {
-      fetchTasks();
+    try {
+      await apiTasks.update(taskId, !currentCompleted);
+      fetchTasks(userId!);
+      if (!currentCompleted) toast.success(API_MESSAGES.TASK_UPDATED);
+    } catch (err) {
+      toast.error(API_MESSAGES.TASK_FAILED_UPDATE);
     }
   };
 
-  const deleteTask = async (taskId: string) => {
-    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
-    if (error) {
-      console.error("Error deleting task:", error);
-    } else {
-      fetchTasks();
+  const confirmDeleteTask = (taskId: string) => {
+    const foundTask = tasks.find((t) => t.id === taskId);
+    if (foundTask) {
+      setTaskToDelete(foundTask);
     }
   };
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const dueTodayTasks = tasks.filter(t => !t.completed && t.due_date === todayStr);
-
-  // Apply search, filter, and sort
-  let displayedTasks = [...tasks];
-
-  if (searchQuery.trim() !== "") {
-    displayedTasks = displayedTasks.filter(t => 
-      t.description.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }
-
-  if (filterStatus === "active") {
-    displayedTasks = displayedTasks.filter(t => !t.completed);
-  } else if (filterStatus === "completed") {
-    displayedTasks = displayedTasks.filter(t => t.completed);
-  }
-
-  displayedTasks.sort((a, b) => {
-    if (sortBy === "due_date") {
-      if (!a.due_date) return 1;
-      if (!b.due_date) return -1;
-      return a.due_date.localeCompare(b.due_date);
-    } else if (sortBy === "priority") {
-      return a.priority - b.priority;
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
+    try {
+      await apiTasks.delete(taskToDelete.id);
+      fetchTasks(userId!);
+      toast.success(API_MESSAGES.TASK_DELETED);
+    } catch (err) {
+      toast.error(API_MESSAGES.TASK_FAILED_DELETE);
+    } finally {
+      setTaskToDelete(null);
     }
-    return 0; 
-  });
+  };
+
+  const todayStr = getTodayDateString();
+  const displayedTasks = filterAndSortTasks(tasks, searchQuery, filterStatus, sortBy);
+  const stats = calculateTaskStats(tasks);
 
   if (status === "loading") {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    );
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="w-10 h-10 border-4 border-[#2D5E41]/30 border-t-[#2D5E41] rounded-full animate-spin"></div></div>;
   }
 
   return (
-    <div className="min-h-screen bg-white px-4 py-8 text-black">
-      <main className="mx-auto max-w-2xl">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Tasks</h1>
-            <p className="text-sm text-gray-600">{userEmail}</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="px-4 py-2 bg-gray-200 text-black text-sm font-semibold hover:bg-gray-300"
-          >
-            Sign Out
-          </button>
-        </div>
-
-        <form onSubmit={handleCreateTask} className="mb-8 p-4 border border-gray-300 space-y-4">
-          <h2 className="font-semibold text-lg">Create New Task</h2>
-          {errorMsg && <p className="text-red-500 text-sm">{errorMsg}</p>}
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Description *</label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border border-gray-300 bg-white text-black px-3 py-2"
-              placeholder="What needs to be done?"
-            />
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">Due Date</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full border border-gray-300 bg-white text-black px-3 py-2"
-              />
+    <>
+      <div className="dashboard">
+        <div className="main-content">
+          <header className="header">
+            <div><div className="header-title">My Task Dashboard</div><div className="header-email">{userEmail}</div></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div style={{ fontSize: "11px", color: "var(--text-gray)", fontWeight: "500", minWidth: "180px", textAlign: "right" }}>{currentTime}</div>
+              <button onClick={() => { if (toastId) toast.dismiss(toastId); handleSignOut(); }} style={{ padding: "8px 16px", background: "var(--primary-dark)", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: "600", cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => e.currentTarget.style.background = "var(--primary-light)"} onMouseLeave={(e) => e.currentTarget.style.background = "var(--primary-dark)"}>Logout</button>
             </div>
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">Priority</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(Number(e.target.value))}
-                className="w-full border border-gray-300 bg-white text-black px-3 py-2"
-              >
-                <option value={1}>High</option>
-                <option value={2}>Medium</option>
-                <option value={3}>Low</option>
-              </select>
-            </div>
-          </div>
+          </header>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full border border-gray-300 bg-white text-black px-3 py-2"
-              rows={2}
-            ></textarea>
-          </div>
-
-          <button type="submit" className="px-4 py-2 bg-black text-white font-semibold text-sm hover:bg-gray-900">
-            Add Task
-          </button>
-        </form>
-
-        <div className="mb-6 p-4 border border-gray-300 bg-gray-50 flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium mb-1">Search</label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search tasks..."
-              className="w-full border border-gray-300 bg-white text-black px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Filter</label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as "all" | "active" | "completed")}
-              className="w-full border border-gray-300 bg-white text-black px-3 py-2 text-sm"
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Sort By</label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as "created" | "due_date" | "priority")}
-              className="w-full border border-gray-300 bg-white text-black px-3 py-2 text-sm"
-            >
-              <option value="created">Newest First</option>
-              <option value="due_date">Due Date</option>
-              <option value="priority">Priority</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h2 className="font-semibold text-lg">Your Tasks</h2>
-          {displayedTasks.length === 0 ? (
-            <p className="text-gray-500">No tasks found.</p>
-          ) : (
-            displayedTasks.map((task) => (
-              <div key={task.id} className="p-4 border border-gray-300 flex flex-col gap-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => toggleComplete(task.id, task.completed)}
-                      className="w-5 h-5 cursor-pointer accent-black"
-                    />
-                    <span className={`font-medium ${task.completed ? "line-through text-gray-500" : ""}`}>
-                      {task.description}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => deleteTask(task.id)}
-                    className="text-red-500 text-sm hover:underline"
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                <div className="flex gap-4 text-xs ml-8 items-center">
-                  {task.due_date && <span className="text-gray-600">Due: {task.due_date}</span>}
-                  <span className={`px-2 py-0.5 rounded text-white font-semibold ${task.priority === 1 ? 'bg-red-500' : task.priority === 2 ? 'bg-yellow-500' : 'bg-green-500'}`}>
-                   {task.priority === 1 ? 'High' : task.priority === 2 ? 'Medium' : 'Low'} Priority
-                  </span>
-                </div>
-                {task.notes && (
-                  <div className="text-sm text-gray-700 ml-8 mt-1 p-2 bg-gray-50 border whitespace-pre-wrap">
-                    {task.notes}
-                  </div>
-                )}
+          <div className="content">
+            <div>
+              <div className="stats-grid">
+                <div className="stat-card"><div className="stat-value">{stats.total}</div><div className="stat-label">Total</div></div>
+                <div className="stat-card"><div className="stat-value">{stats.completed}</div><div className="stat-label">Completed</div></div>
+                <div className="stat-card"><div className="stat-value">{stats.active}</div><div className="stat-label">Active</div></div>
               </div>
-            ))
-          )}
-        </div>
-      </main>
 
-      {/* Toast Alert for Due Today */}
-      {!isToastDismissed && dueTodayTasks.length > 0 && (
-        <div className="fixed bottom-4 right-4 bg-blue-100 border border-blue-400 text-blue-800 px-4 py-3 rounded shadow-lg max-w-sm z-50">
-          <div className="flex justify-between items-center border-b border-blue-300 pb-1 mb-2">
-            <span className="font-bold">⚠️ Due Today!</span>
-            <button 
-              onClick={() => setIsToastDismissed(true)} 
-              className="text-blue-800 hover:text-blue-600 font-bold ml-4 leading-none text-xl"
-              aria-label="Close"
-            >
-              &times;
-            </button>
+              <div className="tasks-section">
+                <div className="tasks-header"><div className="tasks-title">Tasks</div></div>
+                <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
+                  <input type="text" className="search-box" placeholder="Search tasks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  <select className="filter-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)}>
+                    <option value="all">All</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                  <select className="sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}>
+                    <option value="created">Created</option>
+                    <option value="due_date">Due Date</option>
+                    <option value="priority">Priority</option>
+                    <option value="description">Description</option>
+                  </select>
+                </div>
+
+                <div className="task-list">
+                  {displayedTasks.length === 0 ? (
+                    <div className="task-list-empty">No tasks yet. Create one to get started!</div>
+                  ) : (
+                    displayedTasks.map((task) => (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        onToggle={toggleComplete}
+                        onDelete={confirmDeleteTask}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-section">
+              <div className="form-title"><Plus /> New Task</div>
+              <form onSubmit={handleCreateTask}>
+                <div className="form-group">
+                  <label className="form-label">Description</label>
+                  <input type="text" className="form-input" placeholder="Task description..." value={description} onChange={(e) => setDescription(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Due Date</label>
+                  <input type="date" className="form-input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Priority</label>
+                  <select className="form-select" value={priority} onChange={(e) => setPriority(Number(e.target.value))}>
+                    <option value={1}>Low</option>
+                    <option value={2}>Medium</option>
+                    <option value={3}>High</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Notes</label>
+                  <textarea className="form-textarea" placeholder="Additional notes..." value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+                </div>
+                <button type="submit" className="form-submit">Create Task</button>
+              </form>
+            </div>
           </div>
-          <ul className="text-sm list-disc pl-4 space-y-1">
-            {dueTodayTasks.map(t => (
-              <li key={t.id}>{t.description}</li>
-            ))}
-          </ul>
+        </div>
+      </div>
+      {taskToDelete && (
+        <div className="modal-backdrop" onClick={() => setTaskToDelete(null)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              ⚠️ Hapus Task
+            </div>
+            <div className="modal-body">
+              Apakah Anda yakin ingin menghapus task ini secara permanen? Tindakan ini tidak dapat dibatalkan.
+              <div className="modal-task-desc">
+                {taskToDelete.description}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setTaskToDelete(null)}>
+                Batal
+              </button>
+              <button className="btn-confirm-delete" onClick={handleDeleteTask}>
+                Hapus
+              </button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

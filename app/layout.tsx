@@ -12,6 +12,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import { Toaster } from "react-hot-toast";
+
 export const metadata: Metadata = {
   title: "Task Manager Challenge",
   description: "Adaptive task manager with Supabase auth.",
@@ -27,7 +29,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-gray-50">
+        {children}
+        <Toaster position="top-right" />
+      </body>
     </html>
   );
 }
