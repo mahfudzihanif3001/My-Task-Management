@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 
 /**
  * GET /api/tasks
@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     // Get user ID dari header (dari client yang sudah terauth)
     const userId = request.headers.get("x-user-id");
+    const authHeader = request.headers.get("authorization");
 
     if (!userId) {
       return NextResponse.json(
@@ -17,8 +18,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const supabaseClient = getSupabase(authHeader);
+
     // Ambil tasks dari database (RLS akan filter by user_id)
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("tasks")
       .select("*")
       .eq("user_id", userId)
@@ -55,6 +58,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const userId = request.headers.get("x-user-id");
+    const authHeader = request.headers.get("authorization");
 
     if (!userId) {
       return NextResponse.json(
@@ -73,8 +77,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const supabaseClient = getSupabase(authHeader);
+
     // Insert task ke database
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("tasks")
       .insert({
         user_id: userId,

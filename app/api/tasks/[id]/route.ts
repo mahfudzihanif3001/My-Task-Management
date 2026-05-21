@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 
 /**
  * PATCH /api/tasks/[id]
@@ -12,6 +12,7 @@ export async function PATCH(
   try {
     const { id: taskId } = await params;
     const userId = request.headers.get("x-user-id");
+    const authHeader = request.headers.get("authorization");
 
     if (!userId) {
       return NextResponse.json(
@@ -29,8 +30,10 @@ export async function PATCH(
 
     const { completed } = await request.json();
 
+    const supabaseClient = getSupabase(authHeader);
+
     // Update task (RLS akan memastikan hanya owner yang bisa update)
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("tasks")
       .update({ completed })
       .eq("id", taskId)
@@ -80,6 +83,7 @@ export async function DELETE(
   try {
     const { id: taskId } = await params;
     const userId = request.headers.get("x-user-id");
+    const authHeader = request.headers.get("authorization");
 
     if (!userId) {
       return NextResponse.json(
@@ -95,8 +99,10 @@ export async function DELETE(
       );
     }
 
+    const supabaseClient = getSupabase(authHeader);
+
     // Delete task (RLS / filter memastikan hanya owner yang bisa delete)
-    const { error } = await supabase
+    const { error } = await supabaseClient
       .from("tasks")
       .delete()
       .eq("id", taskId)

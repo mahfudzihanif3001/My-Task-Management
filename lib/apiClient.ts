@@ -22,6 +22,11 @@ async function apiFetch(url: string, options: RequestInit = {}) {
     headers["x-user-id"] = session.userId;
   }
 
+  // Attach JWT token for database Row Level Security (RLS) context
+  if (session?.token) {
+    headers["Authorization"] = `Bearer ${session.token}`;
+  }
+
   const response = await fetch(url, {
     ...options,
     headers,
