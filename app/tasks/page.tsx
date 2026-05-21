@@ -34,7 +34,7 @@ export default function TasksPage() {
   const [notes, setNotes] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "completed">("all");
-  const [sortBy, setSortBy] = useState<"created" | "due_date" | "priority" | "description">("created");
+  const [sortBy, setSortBy] = useState<"created" | "due_date" | "priority">("created");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [hasNotifiedDue, setHasNotifiedDue] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>("");
@@ -165,18 +165,10 @@ export default function TasksPage() {
       <div className="dashboard">
         <div className="main-content">
           <header className="header">
-            <div className="header-left">
-              <div className="header-title">My Task Dashboard</div>
-              <div className="header-email">{userEmail}</div>
-            </div>
-            <div className="header-right">
-              <div className="header-time">{currentTime}</div>
-              <button 
-                onClick={() => { if (toastId) toast.dismiss(toastId); handleSignOut(); }} 
-                className="btn-logout"
-              >
-                Logout
-              </button>
+            <div><div className="header-title">My Task Dashboard</div><div className="header-email">{userEmail}</div></div>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div style={{ fontSize: "11px", color: "var(--text-gray)", fontWeight: "500", minWidth: "180px", textAlign: "right" }}>{currentTime}</div>
+              <button onClick={() => { if (toastId) toast.dismiss(toastId); handleSignOut(); }} style={{ padding: "8px 16px", background: "var(--primary-dark)", color: "white", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: "600", cursor: "pointer", transition: "background 0.2s" }} onMouseEnter={(e) => e.currentTarget.style.background = "var(--primary-light)"} onMouseLeave={(e) => e.currentTarget.style.background = "var(--primary-dark)"}>Logout</button>
             </div>
           </header>
 
@@ -236,9 +228,9 @@ export default function TasksPage() {
                 <div className="form-group">
                   <label className="form-label">Priority</label>
                   <select className="form-select" value={priority} onChange={(e) => setPriority(Number(e.target.value))}>
-                    <option value={1}>Low</option>
+                    <option value={1}>High</option>
                     <option value={2}>Medium</option>
-                    <option value={3}>High</option>
+                    <option value={3}>Low</option>
                   </select>
                 </div>
                 <div className="form-group">
