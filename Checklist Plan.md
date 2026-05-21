@@ -14,8 +14,8 @@ Ringkasan singkat pekerjaan (untuk reviewer): status saat ini ditandai di sebela
 - [x] Real-time date & time navbar — menampilkan tanggal dan jam real-time di navbar.
 - [x] Custom notification close button — notif due today punya close button (×) yang user bisa klik untuk dismiss.
 - [x] Tambah loading, empty, dan error states — spin state, empty folder icons sudah diatur rapi.
-- [ ] Capture screenshots UI dan simpan di repo (bonus) — tangkapan layar sudah siap untuk didokumentasikan.
+- [x] Capture screenshots UI dan simpan di repo (bonus) — tangkapan layar sudah siap untuk didokumentasikan.
 - [x] Update README (setup, env, run instructions) — README sangat lengkap dan mencakup arsitektur sistem, data flow, skema database, referensi API, dan panduan setup.
 - [x] Buat commits harian dengan pesan yang jelas — sudah dilakukan
-- [x] Final QA & polish sebelum kirim link — Selesai pada May 21, 2026. Audit kode selesai (Clean Code & mudah dimaintenance oleh Junior Dev), perbaikan rute DELETE selesai, sorting description ditambahkan, dan pembersihan file SVG bawaan Next.js yang tidak terpakai selesai dilakukan.
+- [] Final QA & polish sebelum kirim link — target selesai pada May 21, 2026.
 
